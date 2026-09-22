@@ -1,6 +1,4 @@
-# app/services/booking_service.py
 import random
-import string
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -8,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
 
-from app.models import Provider, Slot, Booking
+from app.models import Slot, Booking
 from app.schemas import AvailabilitySlot, BookingConfirmation
 
 PROVIDER_TZ = ZoneInfo("Africa/Accra")
@@ -28,8 +26,7 @@ def _to_spoken_label(dt: datetime) -> str:
 
 
 def _generate_confirmation_code(length: int = 6) -> str:
-    # Avoid 0/O and 1/I so it's unambiguous when read aloud or typed back
-    alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+    alphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O or 1/I — unambiguous spoken aloud
     return "".join(random.choices(alphabet, k=length))
 
 
@@ -55,13 +52,14 @@ async def check_availability(db: AsyncSession, target_date: date) -> list[Availa
 
 
 async def book_slot(
-    db: AsyncSession,
-    slot_id: int,
-    caller_name: str,
-    caller_phone: str,
+    db: AsyncSession, slot_id: int, caller_name: str, caller_phone: str
 ) -> BookingConfirmation:
-    async with db.begin():
+    normalized_phone = "".join(caller_phone.split())
+    digits = normalized_phone[1:] if normalized_phone.startswith("+") else normalized_phone
+    if not digits.isdigit() or not 7 <= len(digits) <= 15:
+        raise ValueError("Caller phone must contain 7 to 15 digits")
 
+    async with db.begin():
         result = await db.execute(
             select(Slot).where(Slot.id == slot_id).with_for_update()
         )
@@ -69,16 +67,14 @@ async def book_slot(
 
         if slot is None:
             raise ValueError(f"No slot with id {slot_id}")
-
         if slot.is_booked:
             raise SlotAlreadyBookedError(f"Slot {slot_id} is already booked")
 
         slot.is_booked = True
-
         booking = Booking(
             slot_id=slot.id,
             caller_name=caller_name,
-            caller_phone=caller_phone,
+            caller_phone=normalized_phone,
             confirmation_code=_generate_confirmation_code(),
         )
         db.add(booking)
@@ -87,8 +83,6 @@ async def book_slot(
             await db.flush()
         except IntegrityError:
             raise SlotAlreadyBookedError(f"Slot {slot_id} is already booked")
-
-    # transaction commits automatically on clean exit from `async with`
 
     return BookingConfirmation(
         confirmation_code=booking.confirmation_code,
