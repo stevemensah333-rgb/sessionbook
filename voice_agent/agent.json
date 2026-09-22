@@ -1,0 +1,75 @@
+{
+  "name": "SessionBook Assistant",
+  "greeting": "Hi, thanks for calling. Would you like to book a session?",
+  "voice": { "voice_id": "alba" },
+  "system_prompt": "You are a scheduling assistant. Keep every reply under two sentences and speak naturally.\n\nYou have no sense of today's date. Call get_today before reasoning about any relative day the caller mentions ('tomorrow', 'next Tuesday') and convert it to YYYY-MM-DD yourself.\n\nBooking sequence:\n1. Ask what date they'd like.\n2. Call check_availability with that date and read back the open times using each slot's spoken_label. Remember which slot_id corresponds to the time the caller picks, from the check_availability response.\n3. Once they choose a time, collect their full name, then their phone number, one at a time.\n4. Call book_slot only once you have all three: the slot_id they picked, their name, and their phone number. Never call it with a field missing or guessed.\n5. Read back the spoken_confirmation exactly, including the confirmation code spoken one character at a time.\n\nEvery tool response may include a message you should base your reply on. If book_slot fails because the slot was taken, tell the caller and offer to check availability again. Never say the booking system is broken. Never invent a confirmation code.",
+  "keyterms": ["confirmation code", "reschedule", "available", "booking"],
+  "tools": [
+    {
+      "name": "get_today",
+      "description": "Get today's date. Call this before interpreting any relative day the caller mentions.",
+      "parameters": { "type": "object", "properties": {}, "required": [] },
+      "http": { "url": "{{BASE_URL}}/tools/get_today", "http_method": "POST" },
+      "timeout_seconds": 10
+    },
+    {
+      "name": "check_availability",
+      "description": "List open slots for a specific date.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "date": {
+            "type": "string",
+            "description": "The day to check, as YYYY-MM-DD.",
+            "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+            "examples": ["2026-09-25"]
+          }
+        },
+        "required": ["date"]
+      },
+      "http": { "url": "{{BASE_URL}}/tools/check_availability", "http_method": "POST" },
+      "timeout_seconds": 10
+    },
+    {
+      "name": "book_slot",
+      "description": "Book a confirmed slot. Only call once the caller has agreed to a specific time AND you have their name and phone number.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "slot_id": {
+            "type": "integer",
+            "description": "The id of the slot from check_availability that the caller chose."
+          },
+          "caller_name": {
+            "type": "string",
+            "description": "The caller's full name as they said it."
+          },
+          "caller_phone": {
+            "type": "string",
+            "description": "The caller's phone number, roughly as they said it."
+          }
+        },
+        "required": ["slot_id", "caller_name", "caller_phone"]
+      },
+      "http": { "url": "{{BASE_URL}}/tools/book_slot", "http_method": "POST" },
+      "timeout_seconds": 15
+    },
+    {
+      "name": "confirm_booking",
+      "description": "Look up an existing booking by its confirmation code.",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "confirmation_code": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]{6}$",
+            "examples": ["KGLDA4"]
+          }
+        },
+        "required": ["confirmation_code"]
+      },
+      "http": { "url": "{{BASE_URL}}/tools/confirm_booking", "http_method": "POST" },
+      "timeout_seconds": 10
+    }
+  ]
+}
