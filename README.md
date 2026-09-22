@@ -92,6 +92,55 @@ ngrok http 8000
 python -m scripts.create_agent
 ```
 
+## How to communicate with the agent
+
+The local API, ngrok, and the AssemblyAI voice agent are separate pieces:
+
+1. Keep the FastAPI server running in terminal 1:
+
+   ```bash
+   source venv/bin/activate
+   venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+   ```
+
+2. Keep ngrok running in terminal 2:
+
+   ```bash
+   ngrok http 8000
+   ```
+
+   Copy the exact `https://...ngrok-free.app` URL into `.env` as
+   `PUBLIC_API_BASE_URL`.
+
+3. Publish the agent from the project root in terminal 3:
+
+   ```bash
+   source venv/bin/activate
+   venv/bin/python -m scripts.create_agent
+   ```
+
+   Save the printed `agent_id`; it is also written to `agent_id.txt`.
+
+4. Open the AssemblyAI Voice Agent playground in your AssemblyAI dashboard,
+   choose the published agent, and start a browser conversation. Speak
+   naturally: ask for a date, choose one of the available times, then provide
+   your name and phone number. The agent calls the booking endpoints through
+   ngrok and reads the confirmation code back to you.
+
+The browser or phone does **not** connect directly to the ngrok URL. It
+connects to AssemblyAI using the published `agent_id`; AssemblyAI then calls
+the ngrok URLs configured in `voice_agent/agent.json`.
+
+To update the published prompt or tools later:
+
+```bash
+venv/bin/python -m scripts.create_agent --update YOUR_AGENT_ID
+```
+
+For a phone conversation, bind the same `agent_id` to a Twilio number through
+AssemblyAI's telephony/SIP integration. Keep Uvicorn and ngrok running during
+testing. For production, replace ngrok with a stable HTTPS deployment.
+
 ## Environment variables
 
 See `.env.example`. Requires `DATABASE_URL` (async, `postgresql+asyncpg://...`), `ASSEMBLYAI_API_KEY`, and `PUBLIC_API_BASE_URL` (your public tunnel URL).
